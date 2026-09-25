@@ -831,4 +831,4 @@ class MainActivity : AppCompatActivity() {
                 1_000
 
         val millis =
-            milliseconds % 1_00
+            milliseconds % 1_000
