@@ -249,39 +249,44 @@ class MainActivity : AppCompatActivity() {
                 )
 
             val srt =
-                buildString {
+    buildString {
 
-                    result.segments.forEachIndexed {
-                            index,
-                            segment ->
+        result.segments.forEachIndexed { index, segment ->
 
-                        append(index + 1)
-                        append("\n")
+            val text =
+                cleanSubtitleText(
+                    segment.text
+                )
 
-                        append(
-                            formatSrtTime(
-                                segment.startMs
-                            )
-                        )
+            if (text.isNotEmpty()) {
 
-                        append(" --> ")
+                append(index + 1)
+                append("\n")
 
-                        append(
-                            formatSrtTime(
-                                segment.endMs
-                            )
-                        )
+                append(
+                    formatSrtTime(
+                        segment.startMs
+                    )
+                )
 
-                        append("\n")
+                append(" --> ")
 
-                        append(
-                            segment.text.trim()
-                        )
+                append(
+                    formatSrtTime(
+                        segment.endMs
+                    )
+                )
 
-                        append("\n\n")
-                    }
-                }
+                append("\n")
 
+                append(
+                    splitSubtitleText(text)
+                )
+
+                append("\n\n")
+            }
+        }
+    }
             findViewById<EditText>(
                 R.id.edtSubtitle
             ).setText(srt)
@@ -823,6 +828,68 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
+  private fun cleanSubtitleText(
+    text: String
+): String {
+
+    return text
+        .replace(Regex("\\s+"), " ")
+        .trim()
+        .replace(" ,", ",")
+        .replace(" .", ".")
+        .replace(" !", "!")
+        .replace(" ?", "?")
+  } 
+    private fun splitSubtitleText(
+    text: String
+): String {
+
+    if (text.length <= 42) {
+        return text
+    }
+
+    val words =
+        text.split(" ")
+
+    val firstLine =
+        StringBuilder()
+
+    val secondLine =
+        StringBuilder()
+
+    var firstLineLength = 0
+
+    for (word in words) {
+
+        if (
+            firstLineLength + word.length + 1 <= 42
+        ) {
+
+            if (firstLine.isNotEmpty()) {
+                firstLine.append(" ")
+            }
+
+            firstLine.append(word)
+
+            firstLineLength =
+                firstLine.length
+
+        } else {
+
+            if (secondLine.isNotEmpty()) {
+                secondLine.append(" ")
+            }
+
+            secondLine.append(word)
+        }
+    }
+
+    return if (secondLine.isEmpty()) {
+        firstLine.toString()
+    } else {
+        "${firstLine}\n${secondLine}"
+    }
+  } 
     private fun formatSrtTime(
         milliseconds: Long
     ): String {
