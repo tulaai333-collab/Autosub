@@ -801,7 +801,15 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
-    private fun RandomAccessFile.writeIntLE(
+  private fun updateStatus(
+    text: String
+) {
+    runOnUiThread {
+        findViewById<TextView>(
+            R.id.txtStatus
+        ).text = text
+    }
+  }  private fun RandomAccessFile.writeIntLE(
         value: Int
     ) {
 
