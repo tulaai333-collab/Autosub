@@ -832,3 +832,12 @@ class MainActivity : AppCompatActivity() {
 
         val millis =
             milliseconds % 1_000
+        return String.format(
+            "%02d:%02d:%02d,%03d",
+            hours,
+            minutes,
+            seconds,
+            millis
+        )
+    }
+}
