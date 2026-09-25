@@ -32,5 +32,6 @@ dependencies {
 
     // Whisper offline speech-to-text
     implementation 'dev.ffmpegkit-maintained:whisper-android:1.0.0'
-}
+
 implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+}
