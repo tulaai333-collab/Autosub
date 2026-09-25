@@ -22,6 +22,8 @@ jobs:
 
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v4
+        with:
+          gradle-version: '8.10.2'
 
       - name: Build APK
         run: gradle assembleDebug --no-daemon
@@ -29,5 +31,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: VideoTranslatorV1-debug
+          name: Autosub-debug
           path: app/build/outputs/apk/debug/app-debug.apk
