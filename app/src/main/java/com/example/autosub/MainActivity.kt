@@ -848,4 +848,33 @@ class MainActivity : AppCompatActivity() {
             millis
         )
     }
-}
+private fun getFileName(
+    uri: Uri
+): String {
+
+    var fileName = "video"
+
+    contentResolver.query(
+        uri,
+        null,
+        null,
+        null,
+        null
+    )?.use { cursor ->
+
+        val nameIndex =
+            cursor.getColumnIndex(
+                OpenableColumns.DISPLAY_NAME
+            )
+
+        if (
+            cursor.moveToFirst() &&
+            nameIndex >= 0
+        ) {
+            fileName =
+                cursor.getString(nameIndex)
+        }
+    }
+
+    return fileName
+}}
