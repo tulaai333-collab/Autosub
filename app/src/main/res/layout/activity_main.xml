@@ -32,12 +32,19 @@
             android:text="Chọn video"
             android:layout_marginTop="12dp" />
 
+        <Button
+            android:id="@+id/btnAutoSubtitle"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="Tạo phụ đề tự động"
+            android:layout_marginTop="12dp" />
+
         <EditText
             android:id="@+id/edtSubtitle"
             android:layout_width="match_parent"
             android:layout_height="220dp"
             android:gravity="top"
-            android:hint="Nhập hoặc dán phụ đề tiếng Việt..."
+            android:hint="Phụ đề sẽ xuất hiện ở đây..."
             android:inputType="textMultiLine"
             android:padding="12dp"
             android:layout_marginTop="12dp" />
