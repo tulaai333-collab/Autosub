@@ -15,12 +15,17 @@ class MainActivity : AppCompatActivity() {
     private var selectedVideo: Uri? = null
 
     private val pickVideo =
-        registerForActivityResult(ActivityResultContracts.GetContent()) { uri ->
+        registerForActivityResult(
+            ActivityResultContracts.GetContent()
+        ) { uri ->
+
             if (uri != null) {
                 selectedVideo = uri
 
+                val name = getFileName(uri)
+
                 findViewById<TextView>(R.id.txtVideo).text =
-                    "Video: ${getFileName(uri)}"
+                    "Video: $name"
 
                 findViewById<TextView>(R.id.txtStatus).text =
                     "Đã chọn video. Hãy nhập phụ đề."
@@ -29,25 +34,31 @@ class MainActivity : AppCompatActivity() {
 
     private val createSrt =
         registerForActivityResult(
-            ActivityResultContracts.CreateDocument("application/x-subrip")
+            ActivityResultContracts.CreateDocument(
+                "application/x-subrip"
+            )
         ) { uri ->
 
             if (uri != null) {
 
-                val text =
-                    findViewById<EditText>(R.id.edtSubtitle)
-                        .text.toString()
+                val subtitle =
+                    findViewById<EditText>(
+                        R.id.edtSubtitle
+                    ).text.toString().trim()
 
-                val srt = makeSrt(text)
+                val srt = makeSrt(subtitle)
 
-                contentResolver.openOutputStream(uri)?.use { output ->
-                    output.write(
-                        srt.toByteArray(Charsets.UTF_8)
-                    )
-                }
+                contentResolver
+                    .openOutputStream(uri)
+                    ?.use { output ->
+                        output.write(
+                            srt.toByteArray(Charsets.UTF_8)
+                        )
+                    }
 
-                findViewById<TextView>(R.id.txtStatus).text =
-                    "Đã xuất phụ đề thành công."
+                findViewById<TextView>(
+                    R.id.txtStatus
+                ).text = "Đã xuất phụ đề thành công."
 
                 Toast.makeText(
                     this,
@@ -62,47 +73,57 @@ class MainActivity : AppCompatActivity() {
 
         setContentView(R.layout.activity_main)
 
-        findViewById<Button>(R.id.btnChooseVideo)
-            .setOnClickListener {
-                pickVideo.launch("video/*")
+        val chooseButton =
+            findViewById<Button>(
+                R.id.btnChooseVideo
+            )
+
+        chooseButton.setOnClickListener {
+            pickVideo.launch("video/*")
+        }
+
+        val exportButton =
+            findViewById<Button>(
+                R.id.btnExport
+            )
+
+        exportButton.setOnClickListener {
+
+            if (selectedVideo == null) {
+
+                Toast.makeText(
+                    this,
+                    "Hãy chọn video trước.",
+                    Toast.LENGTH_SHORT
+                ).show()
+
+                return@setOnClickListener
             }
 
-        findViewById<Button>(R.id.btnExport)
-            .setOnClickListener {
+            val subtitle =
+                findViewById<EditText>(
+                    R.id.edtSubtitle
+                ).text.toString().trim()
 
-                if (selectedVideo == null) {
-                    Toast.makeText(
-                        this,
-                        "Hãy chọn video trước.",
-                        Toast.LENGTH_SHORT
-                    ).show()
+            if (subtitle.isEmpty()) {
 
-                    return@setOnClickListener
-                }
+                Toast.makeText(
+                    this,
+                    "Hãy nhập phụ đề.",
+                    Toast.LENGTH_SHORT
+                ).show()
 
-                val text =
-                    findViewById<EditText>(R.id.edtSubtitle)
-                        .text.toString()
-                        .trim()
-
-                if (text.isEmpty()) {
-                    Toast.makeText(
-                        this,
-                        "Hãy nhập phụ đề.",
-                        Toast.LENGTH_SHORT
-                    ).show()
-
-                    return@setOnClickListener
-                }
-
-                createSrt.launch("autosub.srt")
+                return@setOnClickListener
             }
+
+            createSrt.launch("autosub.srt")
         }
     }
 
     private fun makeSrt(text: String): String {
 
-        val lines = text.lines()
+        val lines = text
+            .lines()
             .map { it.trim() }
             .filter { it.isNotEmpty() }
 
@@ -116,9 +137,13 @@ class MainActivity : AppCompatActivity() {
             result.append(index + 1)
                 .append("\n")
 
-            result.append(formatTime(start))
+            result.append(
+                formatTime(start)
+            )
                 .append(" --> ")
-                .append(formatTime(end))
+                .append(
+                    formatTime(end)
+                )
                 .append("\n")
 
             result.append(line)
@@ -144,7 +169,7 @@ class MainActivity : AppCompatActivity() {
 
     private fun getFileName(uri: Uri): String {
 
-        var name = "video"
+        var fileName = "video"
 
         contentResolver.query(
             uri,
@@ -154,14 +179,20 @@ class MainActivity : AppCompatActivity() {
             null
         )?.use { cursor ->
 
-            val index =
-                cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+            val nameIndex =
+                cursor.getColumnIndex(
+                    OpenableColumns.DISPLAY_NAME
+                )
 
-            if (cursor.moveToFirst() && index >= 0) {
-                name = cursor.getString(index)
+            if (
+                cursor.moveToFirst() &&
+                nameIndex >= 0
+            ) {
+                fileName =
+                    cursor.getString(nameIndex)
             }
         }
 
-        return name
+        return fileName
     }
 }
