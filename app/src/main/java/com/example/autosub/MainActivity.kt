@@ -209,13 +209,13 @@ class MainActivity : AppCompatActivity() {
         val modelFile =
             File(
                 filesDir,
-                "models/ggml-base.bin"
+                "models/ggml-small.bin"
             )
 
         if (!modelFile.exists()) {
 
             updateStatus(
-                "Đang tải Whisper model ~142 MB..."
+                "Đang tải Whisper model ~466 MB..."
             )
 
             withContext(Dispatchers.IO) {
@@ -317,8 +317,8 @@ class MainActivity : AppCompatActivity() {
 
         val url =
             URL(
-                "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-base.bin"
-            )
+    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
+)
 
         val connection =
             url.openConnection()
