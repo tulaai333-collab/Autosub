@@ -953,13 +953,10 @@ private fun splitSubtitleText(
 
         val millis =
             milliseconds % 1_000
-        return String.format(
-            "%02d:%02d:%02d,%03d",
-            hours,
-            minutes,
-            seconds,
-            millis
-        )
+        return "${hours.toString().padStart(2, '0')}:" +
+        "${minutes.toString().padStart(2, '0')}:" +
+        "${seconds.toString().padStart(2, '0')}," +
+        millis.toString().padStart(3, '0')
     }
 private fun getFileName(
     uri: Uri
