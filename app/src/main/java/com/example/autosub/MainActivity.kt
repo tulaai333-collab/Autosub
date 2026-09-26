@@ -87,7 +87,7 @@ class MainActivity : AppCompatActivity() {
                     Toast.LENGTH_SHORT
                 ).show()
             }
-        }
+     }
 
     override fun onCreate(
         savedInstanceState: Bundle?
