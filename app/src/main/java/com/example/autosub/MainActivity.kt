@@ -936,7 +936,7 @@ private fun splitSubtitleText(
         "${firstLine}\n${secondLine}"
     }
 }
-    private fun formatSrtTime(
+ private fun formatSrtTime(
     milliseconds: Long
 ): String {
 
