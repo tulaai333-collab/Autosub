@@ -988,7 +988,7 @@ private fun getFileName(
             fileName =
                 cursor.getString(nameIndex)
         }
-    }
+  }
 
     return fileName
 }}
