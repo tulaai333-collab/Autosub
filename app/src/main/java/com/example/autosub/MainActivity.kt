@@ -910,7 +910,7 @@ private fun splitSubtitleText(
         if (
             firstLine.length +
             word.length +
-            if (firstLine.isEmpty()) 0 else 1
+            (if (firstLine.isEmpty()) 0 else 1)
             <= 42
         ) {
 
