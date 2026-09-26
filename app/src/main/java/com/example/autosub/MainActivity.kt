@@ -937,26 +937,30 @@ private fun splitSubtitleText(
     }
 }
     private fun formatSrtTime(
-        milliseconds: Long
-    ): String {
+    milliseconds: Long
+): String {
 
-        val hours =
-            milliseconds / 3_600_000
+    val hours =
+        milliseconds / 3_600_000
 
-        val minutes =
-            (milliseconds % 3_600_000) /
-                60_000
+    val minutes =
+        (milliseconds % 3_600_000) / 60_000
 
-        val seconds =
-            (milliseconds % 60_000) /
-                1_000
+    val seconds =
+        (milliseconds % 60_000) / 1_000
 
-        val millis =
-            milliseconds % 1_000
-        return "${hours.toString().padStart(2, '0')}:" +
-        "${minutes.toString().padStart(2, '0')}:" +
-        "${seconds.toString().padStart(2, '0')}," +
-        millis.toString().padStart(3, '0')
+    val millis =
+        milliseconds % 1_000
+
+    return buildString {
+        append(hours.toString().padStart(2, '0'))
+        append(":")
+        append(minutes.toString().padStart(2, '0'))
+        append(":")
+        append(seconds.toString().padStart(2, '0'))
+        append(",")
+        append(millis.toString().padStart(3, '0'))
+    }
     }
 private fun getFileName(
     uri: Uri
