@@ -248,10 +248,12 @@ class MainActivity : AppCompatActivity() {
                     )
                 )
 
-            val srt =
+            var subtitleIndex = 1
+
+val srt =
     buildString {
 
-        result.segments.forEachIndexed { index, segment ->
+        result.segments.forEach { segment ->
 
             val text =
                 cleanSubtitleText(
@@ -260,7 +262,7 @@ class MainActivity : AppCompatActivity() {
 
             if (text.isNotEmpty()) {
 
-                append(index + 1)
+                append(subtitleIndex++)
                 append("\n")
 
                 append(
@@ -286,6 +288,7 @@ class MainActivity : AppCompatActivity() {
                 append("\n\n")
             }
         }
+    }
     }
             findViewById<EditText>(
                 R.id.edtSubtitle
@@ -828,19 +831,37 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-  private fun cleanSubtitleText(
+  
+
+            private fun cleanSubtitleText(
     text: String
 ): String {
 
-    return text
-        .replace(Regex("\\s+"), " ")
-        .trim()
-        .replace(" ,", ",")
-        .replace(" .", ".")
-        .replace(" !", "!")
-        .replace(" ?", "?")
-  } 
-    private fun splitSubtitleText(
+    var result =
+        text
+            .replace(Regex("\\s+"), " ")
+            .trim()
+
+    result =
+        result
+            .replace(Regex("\\s+([,.!?;:])"), "$1")
+            .replace(Regex("([,.!?;:])(?=\\S)"), "$1 ")
+
+    // Xóa từ bị lặp liên tiếp:
+    // "đúng đúng" -> "đúng"
+    // "rồi rồi rồi" -> "rồi"
+    result =
+        result.replace(
+            Regex(
+                "(?iu)\\b([\\p{L}\\p{N}]{2,})\\b(?:\\s+\\1\\b)+"
+            ),
+            "$1"
+        )
+
+    return result.trim()
+}
+
+private fun splitSubtitleText(
     text: String
 ): String {
 
@@ -848,6 +869,34 @@ class MainActivity : AppCompatActivity() {
         return text
     }
 
+    // Ưu tiên ngắt dòng tại dấu câu
+    val punctuationBreak =
+        Regex("(?<=[,.!?;:])\\s+")
+
+    val parts =
+        text.split(punctuationBreak)
+
+    if (parts.size > 1) {
+
+        val first =
+            parts[0].trim()
+
+        val remaining =
+            parts
+                .drop(1)
+                .joinToString(" ")
+                .trim()
+
+        if (
+            first.isNotEmpty() &&
+            remaining.isNotEmpty() &&
+            first.length <= 42
+        ) {
+            return "$first\n$remaining"
+        }
+    }
+
+    // Không có vị trí ngắt phù hợp -> chia theo từ
     val words =
         text.split(" ")
 
@@ -857,12 +906,13 @@ class MainActivity : AppCompatActivity() {
     val secondLine =
         StringBuilder()
 
-    var firstLineLength = 0
-
     for (word in words) {
 
         if (
-            firstLineLength + word.length + 1 <= 42
+            firstLine.length +
+            word.length +
+            if (firstLine.isEmpty()) 0 else 1
+            <= 42
         ) {
 
             if (firstLine.isNotEmpty()) {
@@ -870,9 +920,6 @@ class MainActivity : AppCompatActivity() {
             }
 
             firstLine.append(word)
-
-            firstLineLength =
-                firstLine.length
 
         } else {
 
@@ -889,7 +936,7 @@ class MainActivity : AppCompatActivity() {
     } else {
         "${firstLine}\n${secondLine}"
     }
-  } 
+}
     private fun formatSrtTime(
         milliseconds: Long
     ): String {
