@@ -953,13 +953,13 @@ private fun splitSubtitleText(
         milliseconds % 1_000
 
     return buildString {
-        append(hours.toString().padStart(2, '0'))
-        append(":")
-        append(minutes.toString().padStart(2, '0'))
-        append(":")
-        append(seconds.toString().padStart(2, '0'))
-        append(",")
-        append(millis.toString().padStart(3, '0'))
+    append(hours.toString().padStart(2, '0'))
+    append(":")
+    append(minutes.toString().padStart(2, '0'))
+    append(":")
+    append(seconds.toString().padStart(2, '0'))
+    append(",")
+    append(millis.toString().padStart(3, '0'))
     }
     }
 private fun getFileName(
