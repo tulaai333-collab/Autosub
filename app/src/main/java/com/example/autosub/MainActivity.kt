@@ -399,152 +399,8 @@ val srt =
         connection.disconnect()
     }
 
-    private fun extractAudioToWav(
-        uri: Uri,
-        outputFile: File
-    ) {
-
-        val extractor =
-            MediaExtractor()
-
-        contentResolver
-            .openFileDescriptor(
-                uri,
-                "r"
-            )
-            ?.use { descriptor ->
-
-                extractor.setDataSource(
-                    descriptor.fileDescriptor
-                )
-            }
-            ?: throw Exception(
-                "Không đọc được video."
-            )
-
-        var audioTrack = -1
-
-        for (
-            i in 0 until extractor.trackCount
-        ) {
-
-            val format =
-                extractor.getTrackFormat(i)
-
-            val mime =
-                format.getString(
-                    MediaFormat.KEY_MIME
-                )
-
-            if (
-                mime != null &&
-                mime.startsWith("audio/")
-            ) {
-
-                audioTrack = i
-                break
-            }
-        }
-
-        if (audioTrack == -1) {
-
-            extractor.release()
-
-            throw Exception(
-                "Video không có audio."
-            )
-        }
-
-        val format =
-            extractor.getTrackFormat(
-                audioTrack
-            )
-
-        val mime =
-            format.getString(
-                MediaFormat.KEY_MIME
-            )
-                ?: throw Exception(
-                    "Không xác định được codec audio."
-                )
-
-        val sampleRate =
-            if (
-                format.containsKey(
-                    MediaFormat.KEY_SAMPLE_RATE
-                )
-            ) {
-                format.getInteger(
-                    MediaFormat.KEY_SAMPLE_RATE
-                )
-            } else {
-                44100
-            }
-
-        val channels =
-            if (
-                format.containsKey(
-                    MediaFormat.KEY_CHANNEL_COUNT
-                )
-            ) {
-                format.getInteger(
-                    MediaFormat.KEY_CHANNEL_COUNT
-                )
-            } else {
-                2
-            }
-
-        val decoder =
-            MediaCodec.createDecoderByType(
-                mime
-            )
-
-        extractor.selectTrack(
-            audioTrack
-        )
-
-        decoder.configure(
-            format,
-            null,
-            null,
-            0
-        )
-
-        decoder.start()
-
-        var totalPcmBytes = 0L
-        var inputDone = false
-        var outputDone = false
-
-        val bufferInfo =
-            MediaCodec.BufferInfo()
-
-        val output =
-            FileOutputStream(
-                outputFile
-            )
-
-        writeWavHeader(
-            output,
-            0,
-            sampleRate,
-            channels
-        )
-
-        try {
-
-            while (!outputDone) {
-
-                if (!inputDone) {
-
-                    val inputIndex =
-                        decoder.dequeueInputBuffer(
-                            10000
-                        )
-
-                    if (inputIndex >= 0) {
-
-                        val inputBuffer =
+    
+            
                             decoder.getInputBuffer(
                                 inputIndex
                             )
@@ -665,26 +521,468 @@ val srt =
             }
 
         } finally {
+private fun extractAudioToWav(
+    uri: Uri,
+    outputFile: File
+) {
 
-            output.flush()
-            output.close()
+    val extractor =
+        MediaExtractor()
 
-            try {
-                decoder.stop()
-            } catch (_: Exception) {
-            }
+    contentResolver
+        .openFileDescriptor(
+            uri,
+            "r"
+        )
+        ?.use { descriptor ->
 
-            decoder.release()
-            extractor.release()
+            extractor.setDataSource(
+                descriptor.fileDescriptor
+            )
         }
+        ?: throw Exception(
+            "Không đọc được video."
+        )
 
-        updateWavHeader(
-            outputFile,
-            totalPcmBytes,
-            sampleRate,
-            channels
+    var audioTrack = -1
+
+    for (
+        i in 0 until extractor.trackCount
+    ) {
+
+        val format =
+            extractor.getTrackFormat(i)
+
+        val mime =
+            format.getString(
+                MediaFormat.KEY_MIME
+            )
+
+        if (
+            mime != null &&
+            mime.startsWith("audio/")
+        ) {
+
+            audioTrack = i
+            break
+        }
+    }
+
+    if (audioTrack == -1) {
+
+        extractor.release()
+
+        throw Exception(
+            "Video không có audio."
         )
     }
+
+    val format =
+        extractor.getTrackFormat(
+            audioTrack
+        )
+
+    val mime =
+        format.getString(
+            MediaFormat.KEY_MIME
+        )
+            ?: throw Exception(
+                "Không xác định được codec audio."
+            )
+
+    val sourceSampleRate =
+        if (
+            format.containsKey(
+                MediaFormat.KEY_SAMPLE_RATE
+            )
+        ) {
+            format.getInteger(
+                MediaFormat.KEY_SAMPLE_RATE
+            )
+        } else {
+            44100
+        }
+
+    val sourceChannels =
+        if (
+            format.containsKey(
+                MediaFormat.KEY_CHANNEL_COUNT
+            )
+        ) {
+            format.getInteger(
+                MediaFormat.KEY_CHANNEL_COUNT
+            )
+        } else {
+            2
+        }
+
+    val decoder =
+        MediaCodec.createDecoderByType(
+            mime
+        )
+
+    extractor.selectTrack(
+        audioTrack
+    )
+
+    decoder.configure(
+        format,
+        null,
+        null,
+        0
+    )
+
+    decoder.start()
+
+    val pcmBuffer =
+        java.io.ByteArrayOutputStream()
+
+    var inputDone = false
+    var outputDone = false
+
+    val bufferInfo =
+        MediaCodec.BufferInfo()
+
+    try {
+
+        while (!outputDone) {
+
+            if (!inputDone) {
+
+                val inputIndex =
+                    decoder.dequeueInputBuffer(
+                        10000
+                    )
+
+                if (inputIndex >= 0) {
+
+                    val inputBuffer =
+                        decoder.getInputBuffer(
+                            inputIndex
+                        )
+
+                    if (inputBuffer != null) {
+
+                        inputBuffer.clear()
+
+                        val sampleSize =
+                            extractor.readSampleData(
+                                inputBuffer,
+                                0
+                            )
+
+                        if (sampleSize < 0) {
+
+                            decoder.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                0,
+                                0,
+                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            )
+
+                            inputDone = true
+
+                        } else {
+
+                            val sampleTime =
+                                extractor.sampleTime
+
+                            decoder.queueInputBuffer(
+                                inputIndex,
+                                0,
+                                sampleSize,
+                                sampleTime,
+                                0
+                            )
+
+                            extractor.advance()
+                        }
+                    }
+                }
+            }
+
+            when (
+                val outputIndex =
+                    decoder.dequeueOutputBuffer(
+                        bufferInfo,
+                        10000
+                    )
+            ) {
+
+                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                    // Codec đã báo format output.
+                }
+
+                MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                    // Chưa có dữ liệu, thử lại.
+                }
+
+                else -> {
+
+                    if (outputIndex >= 0) {
+
+                        val outputBuffer =
+                            decoder.getOutputBuffer(
+                                outputIndex
+                            )
+
+                        if (
+                            outputBuffer != null &&
+                            bufferInfo.size > 0
+                        ) {
+
+                            outputBuffer.position(
+                                bufferInfo.offset
+                            )
+
+                            outputBuffer.limit(
+                                bufferInfo.offset +
+                                    bufferInfo.size
+                            )
+
+                            val bytes =
+                                ByteArray(
+                                    bufferInfo.size
+                                )
+
+                            outputBuffer.get(
+                                bytes
+                            )
+
+                            pcmBuffer.write(
+                                bytes
+                            )
+                        }
+
+                        if (
+                            (
+                                bufferInfo.flags and
+                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                            ) != 0
+                        ) {
+
+                            outputDone = true
+                        }
+
+                        decoder.releaseOutputBuffer(
+                            outputIndex,
+                            false
+                        )
+                    }
+                }
+            }
+        }
+
+    } finally {
+
+        try {
+            decoder.stop()
+        } catch (_: Exception) {
+        }
+
+        decoder.release()
+        extractor.release()
+    }
+
+    val sourcePcm =
+        pcmBuffer.toByteArray()
+
+    if (sourcePcm.isEmpty()) {
+
+        throw Exception(
+            "Không lấy được dữ liệu audio."
+        )
+    }
+
+    /*
+     * V1.2:
+     * Chuyển audio về:
+     * 16 kHz
+     * Mono
+     * PCM 16-bit
+     */
+
+    val sourceFrameSize =
+        sourceChannels * 2
+
+    if (
+        sourceFrameSize <= 0 ||
+        sourcePcm.size < sourceFrameSize
+    ) {
+
+        throw Exception(
+            "Định dạng PCM audio không hợp lệ."
+        )
+    }
+
+    val sourceFrameCount =
+        sourcePcm.size / sourceFrameSize
+
+    val monoSamples =
+        IntArray(
+            sourceFrameCount
+        )
+
+    var frame =
+        0
+
+    while (
+        frame < sourceFrameCount
+    ) {
+
+        var sum =
+            0L
+
+        var channel =
+            0
+
+        while (
+            channel < sourceChannels
+        ) {
+
+            val index =
+                frame *
+                    sourceFrameSize +
+                    channel * 2
+
+            val low =
+                sourcePcm[index]
+                    .toInt() and 0xFF
+
+            val high =
+                sourcePcm[index + 1]
+                    .toInt()
+
+            val sample =
+                low or
+                    (high shl 8)
+
+            val signedSample =
+                if (
+                    sample and 0x8000 != 0
+                ) {
+                    sample - 65536
+                } else {
+                    sample
+                }
+
+            sum += signedSample
+
+            channel++
+        }
+
+        monoSamples[frame] =
+            (
+                sum /
+                    sourceChannels
+            ).toInt()
+
+        frame++
+    }
+
+    val targetSampleRate =
+        16000
+
+    val targetFrameCount =
+        (
+            sourceFrameCount.toLong() *
+                targetSampleRate /
+                sourceSampleRate
+        ).toInt()
+
+    if (targetFrameCount <= 0) {
+
+        throw Exception(
+            "Không đủ dữ liệu để chuyển đổi audio."
+        )
+    }
+
+    val targetPcm =
+        java.io.ByteArrayOutputStream(
+            targetFrameCount * 2
+        )
+
+    var i =
+        0
+
+    while (
+        i < targetFrameCount
+    ) {
+
+        val sourcePosition =
+            i.toDouble() *
+                sourceSampleRate /
+                targetSampleRate
+
+        val leftIndex =
+            sourcePosition.toInt()
+
+        val rightIndex =
+            minOf(
+                leftIndex + 1,
+                sourceFrameCount - 1
+            )
+
+        val fraction =
+            sourcePosition -
+                leftIndex
+
+        val leftSample =
+            monoSamples[leftIndex]
+
+        val rightSample =
+            monoSamples[rightIndex]
+
+        val interpolated =
+            (
+                leftSample +
+                    (
+                        rightSample -
+                            leftSample
+                    ) *
+                    fraction
+            ).toInt()
+
+        val sample =
+            interpolated
+                .coerceIn(
+                    -32768,
+                    32767
+                )
+
+        targetPcm.write(
+            sample and 0xFF
+        )
+
+        targetPcm.write(
+            (sample shr 8) and 0xFF
+        )
+
+        i++
+    }
+
+    val finalPcm =
+        targetPcm.toByteArray()
+
+    FileOutputStream(
+        outputFile
+    ).use { output ->
+
+        writeWavHeader(
+            output,
+            finalPcm.size.toLong(),
+            targetSampleRate,
+            1
+        )
+
+        output.write(
+            finalPcm
+        )
+
+        output.flush()
+    }
+}
 
     private fun writeWavHeader(
         output: FileOutputStream,
