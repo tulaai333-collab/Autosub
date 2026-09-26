@@ -289,7 +289,6 @@ val srt =
             }
         }
     }
-    
             findViewById<EditText>(
                 R.id.edtSubtitle
             ).setText(srt)
