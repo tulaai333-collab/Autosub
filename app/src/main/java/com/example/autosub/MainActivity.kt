@@ -1266,27 +1266,40 @@ private fun getFileName(
 
     var fileName = "video"
 
-    contentResolver.query(
-        uri,
-        null,
-        null,
-        null,
-        null
-    )?.use { cursor ->
+    val cursor =
+        contentResolver.query(
+            uri,
+            null,
+            null,
+            null,
+            null
+        )
 
-        val nameIndex =
-            cursor.getColumnIndex(
-                OpenableColumns.DISPLAY_NAME
-            )
+    if (cursor != null) {
 
-        if (
-            cursor.moveToFirst() &&
-            nameIndex >= 0
-        ) {
-            fileName =
-                cursor.getString(nameIndex)
+        try {
+
+            val nameIndex =
+                cursor.getColumnIndex(
+                    OpenableColumns.DISPLAY_NAME
+                )
+
+            if (
+                cursor.moveToFirst() &&
+                nameIndex >= 0
+            ) {
+
+                fileName =
+                    cursor.getString(
+                        nameIndex
+                    )
+            }
+
+        } finally {
+
+            cursor.close()
         }
-  }
+    }
 
     return fileName
-}}
+}
