@@ -1266,8 +1266,8 @@ private fun getFileName(
 
     var fileName = "video"
 
-    val cursor =
-        contentResolver.query(
+    val cursor: android.database.Cursor? =
+    contentResolver.query(
             uri,
             null,
             null,
