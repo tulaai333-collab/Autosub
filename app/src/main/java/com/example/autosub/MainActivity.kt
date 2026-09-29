@@ -1259,7 +1259,7 @@ private fun splitSubtitleText(
     append(",")
     append(millis.toString().padStart(3, '0'))
     }
-    
+ } 
 private fun getFileName(
     uri: Uri
 ): String {
