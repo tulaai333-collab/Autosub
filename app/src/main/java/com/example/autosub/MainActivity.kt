@@ -13,14 +13,20 @@ import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AppCompatActivity
 import androidx.lifecycle.lifecycleScope
+import com.google.mlkit.common.model.DownloadConditions
+import com.google.mlkit.nl.languageid.LanguageIdentification
+import com.google.mlkit.nl.translate.TranslateLanguage
+import com.google.mlkit.nl.translate.Translation
+import com.google.mlkit.nl.translate.TranslatorOptions
 import dev.ffmpegkit.whisper.Whisper
 import dev.ffmpegkit.whisper.WhisperConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.tasks.await
 import kotlinx.coroutines.withContext
+import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.net.HttpURLConnection
 import java.net.URL
 import java.nio.ByteBuffer
@@ -34,297 +40,202 @@ class MainActivity : AppCompatActivity() {
         registerForActivityResult(
             ActivityResultContracts.GetContent()
         ) { uri ->
-
             if (uri != null) {
                 selectedVideo = uri
-
                 val name = getFileName(uri)
-
-                findViewById<TextView>(
-                    R.id.txtVideo
-                ).text = "Video: $name"
-
-                findViewById<TextView>(
-                    R.id.txtStatus
-                ).text =
+                findViewById<TextView>(R.id.txtVideo).text = "Video: $name"
+                findViewById<TextView>(R.id.txtStatus).text =
                     "Đã chọn video. Sẵn sàng nhận diện."
             }
         }
 
     private val createSrt =
         registerForActivityResult(
-            ActivityResultContracts.CreateDocument(
-                "application/x-subrip"
-            )
+            ActivityResultContracts.CreateDocument("application/x-subrip")
         ) { uri ->
-
             if (uri != null) {
-
                 val subtitle =
-                    findViewById<EditText>(
-                        R.id.edtSubtitle
-                    ).text.toString()
+                    findViewById<EditText>(R.id.edtSubtitle).text.toString()
 
-                contentResolver
-                    .openOutputStream(uri)
-                    ?.use { output ->
+                contentResolver.openOutputStream(uri)?.use { output ->
+                    output.write(subtitle.toByteArray(Charsets.UTF_8))
+                }
 
-                        output.write(
-                            subtitle.toByteArray(
-                                Charsets.UTF_8
-                            )
-                        )
-                    }
-
-                findViewById<TextView>(
-                    R.id.txtStatus
-                ).text =
+                findViewById<TextView>(R.id.txtStatus).text =
                     "Đã xuất phụ đề thành công."
 
-                Toast.makeText(
-                    this,
-                    "Xuất SRT thành công",
-                    Toast.LENGTH_SHORT
-                ).show()
+                Toast.makeText(this, "Xuất SRT thành công", Toast.LENGTH_SHORT).show()
             }
-     }
+        }
 
-    override fun onCreate(
-        savedInstanceState: Bundle?
-    ) {
+    override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        setContentView(R.layout.activity_main)
 
-        setContentView(
-            R.layout.activity_main
-        )
-
-        findViewById<Button>(
-            R.id.btnChooseVideo
-        ).setOnClickListener {
+        findViewById<Button>(R.id.btnChooseVideo).setOnClickListener {
             pickVideo.launch("video/*")
         }
 
-        findViewById<Button>(
-            R.id.btnAutoSubtitle
-        ).setOnClickListener {
-
+        findViewById<Button>(R.id.btnAutoSubtitle).setOnClickListener {
             val video = selectedVideo
 
             if (video == null) {
-
-                Toast.makeText(
-                    this,
-                    "Hãy chọn video trước.",
-                    Toast.LENGTH_SHORT
-                ).show()
-
+                Toast.makeText(this, "Hãy chọn video trước.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            val button =
-                findViewById<Button>(
-                    R.id.btnAutoSubtitle
-                )
-
+            val button = findViewById<Button>(R.id.btnAutoSubtitle)
             button.isEnabled = false
 
             lifecycleScope.launch {
-
                 try {
-
                     runAutoSubtitle(video)
-
                 } catch (e: Exception) {
-
-                    findViewById<TextView>(
-                        R.id.txtStatus
-                    ).text =
-                        "Lỗi: ${e.message}"
-
+                    findViewById<TextView>(R.id.txtStatus).text = "Lỗi: ${e.message}"
                     Toast.makeText(
                         this@MainActivity,
                         "Không thể tạo phụ đề.",
                         Toast.LENGTH_LONG
                     ).show()
-
                 } finally {
-
                     button.isEnabled = true
                 }
             }
         }
 
-        findViewById<Button>(
-            R.id.btnExport
-        ).setOnClickListener {
-
+        findViewById<Button>(R.id.btnExport).setOnClickListener {
             val subtitle =
-                findViewById<EditText>(
-                    R.id.edtSubtitle
-                ).text.toString().trim()
+                findViewById<EditText>(R.id.edtSubtitle).text.toString().trim()
 
             if (subtitle.isEmpty()) {
-
-                Toast.makeText(
-                    this,
-                    "Chưa có phụ đề.",
-                    Toast.LENGTH_SHORT
-                ).show()
-
+                Toast.makeText(this, "Chưa có phụ đề.", Toast.LENGTH_SHORT).show()
                 return@setOnClickListener
             }
 
-            createSrt.launch(
-                "autosub.srt"
-            )
+            createSrt.launch("autosub.srt")
         }
     }
 
-    private suspend fun runAutoSubtitle(
-        videoUri: Uri
-    ) {
+    private suspend fun runAutoSubtitle(videoUri: Uri) {
 
-        updateStatus(
-            "Đang chuẩn bị âm thanh..."
-        )
+        updateStatus("Đang chuẩn bị âm thanh...")
 
-        val audioFile =
-            File(
-                cacheDir,
-                "autosub_audio.wav"
-            )
+        val audioFile = File(cacheDir, "autosub_audio.wav")
 
         withContext(Dispatchers.IO) {
-
-            extractAudioToWav(
-                videoUri,
-                audioFile
-            )
+            extractAudioToWav(videoUri, audioFile)
         }
 
-        updateStatus(
-            "Đã tách âm thanh. Đang kiểm tra model..."
-        )
+        updateStatus("Đã tách âm thanh. Đang kiểm tra model...")
 
-        val modelFile =
-            File(
-                filesDir,
-                "models/ggml-small.bin"
-            )
+        val modelFile = File(filesDir, "models/ggml-small.bin")
 
         if (!modelFile.exists()) {
-
-            updateStatus(
-                "Đang tải Whisper model ~466 MB..."
-            )
-
+            updateStatus("Đang tải Whisper model ~466 MB...")
             withContext(Dispatchers.IO) {
                 downloadWhisperModel(modelFile)
             }
         }
 
-        updateStatus(
-            "Đang nạp Whisper..."
-        )
+        updateStatus("Đang nạp Whisper...")
 
-        val model =
-            Whisper.loadModel(
-                this,
-                modelFile.absolutePath
-            )
+        val model = Whisper.loadModel(this, modelFile.absolutePath)
 
         try {
-
-            updateStatus(
-                "Whisper đang nhận diện lời thoại..."
-            )
+            updateStatus("Whisper đang nhận diện lời thoại...")
 
             val result =
                 Whisper.transcribe(
                     model,
                     audioFile.absolutePath,
                     WhisperConfig(
-                        language = "vi"
+                        language = "auto"
                     )
                 )
 
-            var subtitleIndex = 1
-
-val srt =
-    buildString {
-
-        result.segments.forEach { segment ->
-
-            val text =
-                cleanSubtitleText(
-                    segment.text
-                )
-
-            if (text.isNotEmpty()) {
-
-                append(subtitleIndex++)
-                append("\n")
-
-                append(
-                    formatSrtTime(
-                        segment.startMs
-                    )
-                )
-
-                append(" --> ")
-
-                append(
-                    formatSrtTime(
-                        segment.endMs
-                    )
-                )
-
-                append("\n")
-
-                append(
-                    splitSubtitleText(text)
-                )
-
-                append("\n\n")
+            val segs = result.segments.mapNotNull { segment ->
+                val text = cleanSubtitleText(segment.text)
+                if (text.isEmpty()) null
+                else Triple(segment.startMs, segment.endMs, text)
             }
-        }
-   }
-            findViewById<EditText>(
-                R.id.edtSubtitle
-            ).setText(srt)
 
-            updateStatus(
-                "Hoàn tất! Đã tạo ${result.segments.size} đoạn phụ đề."
-            )
+            val viTexts = translateToVietnamese(segs.map { it.third })
 
-            Toast.makeText(
-                this,
-                "Đã nhận diện lời thoại!",
-                Toast.LENGTH_SHORT
-            ).show()
+            val srt = buildString {
+                segs.forEachIndexed { i, (start, end, _) ->
+                    append(i + 1)
+                    append("\n")
+                    append(formatSrtTime(start))
+                    append(" --> ")
+                    append(formatSrtTime(end))
+                    append("\n")
+                    append(splitSubtitleText(viTexts[i]))
+                    append("\n\n")
+                }
+            }
+
+            findViewById<EditText>(R.id.edtSubtitle).setText(srt)
+
+            updateStatus("Hoàn tất! Đã tạo ${segs.size} đoạn phụ đề.")
+
+            Toast.makeText(this, "Đã nhận diện lời thoại!", Toast.LENGTH_SHORT).show()
 
         } finally {
-
             Whisper.releaseModel(model)
-
             audioFile.delete()
         }
     }
 
-    private fun downloadWhisperModel(
-        targetFile: File
-    ) {
+    private suspend fun translateToVietnamese(
+        texts: List<String>
+    ): List<String> {
+        if (texts.isEmpty()) return texts
+
+        return try {
+            val sample = texts.joinToString(" ").take(2000)
+
+            val langTag = LanguageIdentification
+                .getClient()
+                .identifyLanguage(sample)
+                .await()
+
+            if (langTag == "und" || langTag == "vi") return texts
+
+            val source = TranslateLanguage.fromLanguageTag(langTag)
+                ?: return texts
+
+            val translator = Translation.getClient(
+                TranslatorOptions.Builder()
+                    .setSourceLanguage(source)
+                    .setTargetLanguage(TranslateLanguage.VIETNAMESE)
+                    .build()
+            )
+
+            try {
+                updateStatus("Đang tải model dịch (lần đầu)...")
+                translator
+                    .downloadModelIfNeeded(DownloadConditions.Builder().build())
+                    .await()
+
+                updateStatus("Đang dịch sang tiếng Việt...")
+                texts.map { translator.translate(it).await() }
+            } finally {
+                translator.close()
+            }
+        } catch (e: Exception) {
+            updateStatus("Dịch lỗi, giữ nguyên bản gốc: ${e.message}")
+            texts
+        }
+    }
+
+    private fun downloadWhisperModel(targetFile: File) {
 
         targetFile.parentFile?.mkdirs()
 
         val url =
-            URL(
-    "https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin"
-)
+            URL("https://huggingface.co/ggerganov/whisper.cpp/resolve/main/ggml-small.bin")
 
-        val connection =
-            url.openConnection()
-                    as HttpURLConnection
+        val connection = url.openConnection() as HttpURLConnection
 
         connection.connectTimeout = 30000
         connection.readTimeout = 60000
@@ -334,61 +245,29 @@ val srt =
         connection.connect()
 
         if (connection.responseCode !in 200..299) {
-
-            val code =
-                connection.responseCode
-
+            val code = connection.responseCode
             connection.disconnect()
-
-            throw Exception(
-                "Không tải được model. HTTP $code"
-            )
+            throw Exception("Không tải được model. HTTP $code")
         }
 
-        val total =
-            connection.contentLengthLong
-
+        val total = connection.contentLengthLong
         var downloaded = 0L
 
         connection.inputStream.use { input ->
-
-            FileOutputStream(
-                targetFile
-            ).use { output ->
-
-                val buffer =
-                    ByteArray(8192)
+            FileOutputStream(targetFile).use { output ->
+                val buffer = ByteArray(8192)
 
                 while (true) {
+                    val count = input.read(buffer)
+                    if (count == -1) break
 
-                    val count =
-                        input.read(buffer)
-
-                    if (count == -1) {
-                        break
-                    }
-
-                    output.write(
-                        buffer,
-                        0,
-                        count
-                    )
-
+                    output.write(buffer, 0, count)
                     downloaded += count
 
                     if (total > 0) {
-
-                        val percent =
-                            (
-                                downloaded * 100L /
-                                    total
-                            ).toInt()
-
+                        val percent = (downloaded * 100L / total).toInt()
                         runOnUiThread {
-
-                            findViewById<TextView>(
-                                R.id.txtStatus
-                            ).text =
+                            findViewById<TextView>(R.id.txtStatus).text =
                                 "Đang tải Whisper: $percent%"
                         }
                     }
@@ -399,468 +278,228 @@ val srt =
         connection.disconnect()
     }
 
-private fun extractAudioToWav(
-    uri: Uri,
-    outputFile: File
-) {
+    private fun extractAudioToWav(uri: Uri, outputFile: File) {
 
-    val extractor =
-        MediaExtractor()
+        val extractor = MediaExtractor()
 
-    contentResolver
-        .openFileDescriptor(
-            uri,
-            "r"
-        )
-        ?.use { descriptor ->
+        contentResolver.openFileDescriptor(uri, "r")?.use { descriptor ->
+            extractor.setDataSource(descriptor.fileDescriptor)
+        } ?: throw Exception("Không đọc được video.")
 
-            extractor.setDataSource(
-                descriptor.fileDescriptor
-            )
-        }
-        ?: throw Exception(
-            "Không đọc được video."
-        )
+        var audioTrack = -1
 
-    var audioTrack = -1
+        for (i in 0 until extractor.trackCount) {
+            val trackFormat = extractor.getTrackFormat(i)
+            val trackMime = trackFormat.getString(MediaFormat.KEY_MIME)
 
-    for (
-        i in 0 until extractor.trackCount
-    ) {
-
-        val format =
-            extractor.getTrackFormat(i)
-
-        val mime =
-            format.getString(
-                MediaFormat.KEY_MIME
-            )
-
-        if (
-            mime != null &&
-            mime.startsWith("audio/")
-        ) {
-
-            audioTrack = i
-            break
-        }
-    }
-
-    if (audioTrack == -1) {
-
-        extractor.release()
-
-        throw Exception(
-            "Video không có audio."
-        )
-    }
-
-    val format =
-        extractor.getTrackFormat(
-            audioTrack
-        )
-
-    val mime =
-        format.getString(
-            MediaFormat.KEY_MIME
-        )
-            ?: throw Exception(
-                "Không xác định được codec audio."
-            )
-
-    val sourceSampleRate =
-        if (
-            format.containsKey(
-                MediaFormat.KEY_SAMPLE_RATE
-            )
-        ) {
-            format.getInteger(
-                MediaFormat.KEY_SAMPLE_RATE
-            )
-        } else {
-            44100
-        }
-
-    val sourceChannels =
-        if (
-            format.containsKey(
-                MediaFormat.KEY_CHANNEL_COUNT
-            )
-        ) {
-            format.getInteger(
-                MediaFormat.KEY_CHANNEL_COUNT
-            )
-        } else {
-            2
-        }
-
-    val decoder =
-        MediaCodec.createDecoderByType(
-            mime
-        )
-
-    extractor.selectTrack(
-        audioTrack
-    )
-
-    decoder.configure(
-        format,
-        null,
-        null,
-        0
-    )
-
-    decoder.start()
-
-    val pcmBuffer =
-        java.io.ByteArrayOutputStream()
-
-    var inputDone = false
-    var outputDone = false
-
-    val bufferInfo =
-        MediaCodec.BufferInfo()
-
-    try {
-
-        while (!outputDone) {
-
-            if (!inputDone) {
-
-                val inputIndex =
-                    decoder.dequeueInputBuffer(
-                        10000
-                    )
-
-                if (inputIndex >= 0) {
-
-                    val inputBuffer =
-                        decoder.getInputBuffer(
-                            inputIndex
-                        )
-
-                    if (inputBuffer != null) {
-
-                        inputBuffer.clear()
-
-                        val sampleSize =
-                            extractor.readSampleData(
-                                inputBuffer,
-                                0
-                            )
-
-                        if (sampleSize < 0) {
-
-                            decoder.queueInputBuffer(
-                                inputIndex,
-                                0,
-                                0,
-                                0,
-                                MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                            )
-
-                            inputDone = true
-
-                        } else {
-
-                            val sampleTime =
-                                extractor.sampleTime
-
-                            decoder.queueInputBuffer(
-                                inputIndex,
-                                0,
-                                sampleSize,
-                                sampleTime,
-                                0
-                            )
-
-                            extractor.advance()
-                        }
-                    }
-                }
-            }
-
-            when (
-                val outputIndex =
-                    decoder.dequeueOutputBuffer(
-                        bufferInfo,
-                        10000
-                    )
-            ) {
-
-                MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
-                    // Codec đã báo format output.
-                }
-
-                MediaCodec.INFO_TRY_AGAIN_LATER -> {
-                    // Chưa có dữ liệu, thử lại.
-                }
-
-                else -> {
-
-                    if (outputIndex >= 0) {
-
-                        val outputBuffer =
-                            decoder.getOutputBuffer(
-                                outputIndex
-                            )
-
-                        if (
-                            outputBuffer != null &&
-                            bufferInfo.size > 0
-                        ) {
-
-                            outputBuffer.position(
-                                bufferInfo.offset
-                            )
-
-                            outputBuffer.limit(
-                                bufferInfo.offset +
-                                    bufferInfo.size
-                            )
-
-                            val bytes =
-                                ByteArray(
-                                    bufferInfo.size
-                                )
-
-                            outputBuffer.get(
-                                bytes
-                            )
-
-                            pcmBuffer.write(
-                                bytes
-                            )
-                        }
-
-                        if (
-                            (
-                                bufferInfo.flags and
-                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                            ) != 0
-                        ) {
-
-                            outputDone = true
-                        }
-
-                        decoder.releaseOutputBuffer(
-                            outputIndex,
-                            false
-                        )
-                    }
-                }
+            if (trackMime != null && trackMime.startsWith("audio/")) {
+                audioTrack = i
+                break
             }
         }
 
-    } finally {
+        if (audioTrack == -1) {
+            extractor.release()
+            throw Exception("Video không có audio.")
+        }
+
+        val format = extractor.getTrackFormat(audioTrack)
+
+        val mime = format.getString(MediaFormat.KEY_MIME)
+            ?: throw Exception("Không xác định được codec audio.")
+
+        val sourceSampleRate =
+            if (format.containsKey(MediaFormat.KEY_SAMPLE_RATE)) {
+                format.getInteger(MediaFormat.KEY_SAMPLE_RATE)
+            } else {
+                44100
+            }
+
+        val sourceChannels =
+            if (format.containsKey(MediaFormat.KEY_CHANNEL_COUNT)) {
+                format.getInteger(MediaFormat.KEY_CHANNEL_COUNT)
+            } else {
+                2
+            }
+
+        val decoder = MediaCodec.createDecoderByType(mime)
+
+        extractor.selectTrack(audioTrack)
+        decoder.configure(format, null, null, 0)
+        decoder.start()
+
+        val pcmBuffer = ByteArrayOutputStream()
+
+        var inputDone = false
+        var outputDone = false
+
+        val bufferInfo = MediaCodec.BufferInfo()
 
         try {
-            decoder.stop()
-        } catch (_: Exception) {
-        }
+            while (!outputDone) {
 
-        decoder.release()
-        extractor.release()
-    }
+                if (!inputDone) {
+                    val inputIndex = decoder.dequeueInputBuffer(10000)
 
-    val sourcePcm =
-        pcmBuffer.toByteArray()
+                    if (inputIndex >= 0) {
+                        val inputBuffer = decoder.getInputBuffer(inputIndex)
 
-    if (sourcePcm.isEmpty()) {
+                        if (inputBuffer != null) {
+                            inputBuffer.clear()
 
-        throw Exception(
-            "Không lấy được dữ liệu audio."
-        )
-    }
+                            val sampleSize = extractor.readSampleData(inputBuffer, 0)
 
-    /*
-     * V1.2:
-     * Chuyển audio về:
-     * 16 kHz
-     * Mono
-     * PCM 16-bit
-     */
-
-    val sourceFrameSize =
-        sourceChannels * 2
-
-    if (
-        sourceFrameSize <= 0 ||
-        sourcePcm.size < sourceFrameSize
-    ) {
-
-        throw Exception(
-            "Định dạng PCM audio không hợp lệ."
-        )
-    }
-
-    val sourceFrameCount =
-        sourcePcm.size / sourceFrameSize
-
-    val monoSamples =
-        IntArray(
-            sourceFrameCount
-        )
-
-    var frame =
-        0
-
-    while (
-        frame < sourceFrameCount
-    ) {
-
-        var sum =
-            0L
-
-        var channel =
-            0
-
-        while (
-            channel < sourceChannels
-        ) {
-
-            val index =
-                frame *
-                    sourceFrameSize +
-                    channel * 2
-
-            val low =
-                sourcePcm[index]
-                    .toInt() and 0xFF
-
-            val high =
-                sourcePcm[index + 1]
-                    .toInt()
-
-            val sample =
-                low or
-                    (high shl 8)
-
-            val signedSample =
-                if (
-                    sample and 0x8000 != 0
-                ) {
-                    sample - 65536
-                } else {
-                    sample
+                            if (sampleSize < 0) {
+                                decoder.queueInputBuffer(
+                                    inputIndex,
+                                    0,
+                                    0,
+                                    0,
+                                    MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                                )
+                                inputDone = true
+                            } else {
+                                decoder.queueInputBuffer(
+                                    inputIndex,
+                                    0,
+                                    sampleSize,
+                                    extractor.sampleTime,
+                                    0
+                                )
+                                extractor.advance()
+                            }
+                        }
+                    }
                 }
 
-            sum += signedSample
+                when (val outputIndex = decoder.dequeueOutputBuffer(bufferInfo, 10000)) {
 
-            channel++
+                    MediaCodec.INFO_OUTPUT_FORMAT_CHANGED -> {
+                        // Codec đã báo format output.
+                    }
+
+                    MediaCodec.INFO_TRY_AGAIN_LATER -> {
+                        // Chưa có dữ liệu, thử lại.
+                    }
+
+                    else -> {
+                        if (outputIndex >= 0) {
+                            val outputBuffer = decoder.getOutputBuffer(outputIndex)
+
+                            if (outputBuffer != null && bufferInfo.size > 0) {
+                                outputBuffer.position(bufferInfo.offset)
+                                outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+
+                                val bytes = ByteArray(bufferInfo.size)
+                                outputBuffer.get(bytes)
+                                pcmBuffer.write(bytes)
+                            }
+
+                            if ((bufferInfo.flags and MediaCodec.BUFFER_FLAG_END_OF_STREAM) != 0) {
+                                outputDone = true
+                            }
+
+                            decoder.releaseOutputBuffer(outputIndex, false)
+                        }
+                    }
+                }
+            }
+        } finally {
+            try {
+                decoder.stop()
+            } catch (_: Exception) {
+            }
+            decoder.release()
+            extractor.release()
         }
 
-        monoSamples[frame] =
-            (
-                sum /
-                    sourceChannels
-            ).toInt()
+        val sourcePcm = pcmBuffer.toByteArray()
 
-        frame++
+        if (sourcePcm.isEmpty()) {
+            throw Exception("Không lấy được dữ liệu audio.")
+        }
+
+        /*
+         * Chuyển audio về: 16 kHz, mono, PCM 16-bit
+         */
+
+        val sourceFrameSize = sourceChannels * 2
+
+        if (sourceFrameSize <= 0 || sourcePcm.size < sourceFrameSize) {
+            throw Exception("Định dạng PCM audio không hợp lệ.")
+        }
+
+        val sourceFrameCount = sourcePcm.size / sourceFrameSize
+
+        val monoSamples = IntArray(sourceFrameCount)
+
+        var frame = 0
+
+        while (frame < sourceFrameCount) {
+            var sum = 0L
+            var channel = 0
+
+            while (channel < sourceChannels) {
+                val index = frame * sourceFrameSize + channel * 2
+
+                val low = sourcePcm[index].toInt() and 0xFF
+                val high = sourcePcm[index + 1].toInt()
+
+                val sample = low or (high shl 8)
+
+                val signedSample =
+                    if (sample and 0x8000 != 0) sample - 65536 else sample
+
+                sum += signedSample
+                channel++
+            }
+
+            monoSamples[frame] = (sum / sourceChannels).toInt()
+            frame++
+        }
+
+        val targetSampleRate = 16000
+
+        val targetFrameCount =
+            (sourceFrameCount.toLong() * targetSampleRate / sourceSampleRate).toInt()
+
+        if (targetFrameCount <= 0) {
+            throw Exception("Không đủ dữ liệu để chuyển đổi audio.")
+        }
+
+        val targetPcm = ByteArrayOutputStream(targetFrameCount * 2)
+
+        var i = 0
+
+        while (i < targetFrameCount) {
+            val sourcePosition = i.toDouble() * sourceSampleRate / targetSampleRate
+
+            val leftIndex = sourcePosition.toInt()
+            val rightIndex = minOf(leftIndex + 1, sourceFrameCount - 1)
+            val fraction = sourcePosition - leftIndex
+
+            val leftSample = monoSamples[leftIndex]
+            val rightSample = monoSamples[rightIndex]
+
+            val interpolated =
+                (leftSample + (rightSample - leftSample) * fraction).toInt()
+
+            val sample = interpolated.coerceIn(-32768, 32767)
+
+            targetPcm.write(sample and 0xFF)
+            targetPcm.write((sample shr 8) and 0xFF)
+
+            i++
+        }
+
+        val finalPcm = targetPcm.toByteArray()
+
+        FileOutputStream(outputFile).use { output ->
+            writeWavHeader(output, finalPcm.size.toLong(), targetSampleRate, 1)
+            output.write(finalPcm)
+            output.flush()
+        }
     }
-
-    val targetSampleRate =
-        16000
-
-    val targetFrameCount =
-        (
-            sourceFrameCount.toLong() *
-                targetSampleRate /
-                sourceSampleRate
-        ).toInt()
-
-    if (targetFrameCount <= 0) {
-
-        throw Exception(
-            "Không đủ dữ liệu để chuyển đổi audio."
-        )
-    }
-
-    val targetPcm =
-        java.io.ByteArrayOutputStream(
-            targetFrameCount * 2
-        )
-
-    var i =
-        0
-
-    while (
-        i < targetFrameCount
-    ) {
-
-        val sourcePosition =
-            i.toDouble() *
-                sourceSampleRate /
-                targetSampleRate
-
-        val leftIndex =
-            sourcePosition.toInt()
-
-        val rightIndex =
-            minOf(
-                leftIndex + 1,
-                sourceFrameCount - 1
-            )
-
-        val fraction =
-            sourcePosition -
-                leftIndex
-
-        val leftSample =
-            monoSamples[leftIndex]
-
-        val rightSample =
-            monoSamples[rightIndex]
-
-        val interpolated =
-            (
-                leftSample +
-                    (
-                        rightSample -
-                            leftSample
-                    ) *
-                    fraction
-            ).toInt()
-
-        val sample =
-            interpolated
-                .coerceIn(
-                    -32768,
-                    32767
-                )
-
-        targetPcm.write(
-            sample and 0xFF
-        )
-
-        targetPcm.write(
-            (sample shr 8) and 0xFF
-        )
-
-        i++
-    }
-
-    val finalPcm =
-        targetPcm.toByteArray()
-
-    FileOutputStream(
-        outputFile
-    ).use { output ->
-
-        writeWavHeader(
-            output,
-            finalPcm.size.toLong(),
-            targetSampleRate,
-            1
-        )
-
-        output.write(
-            finalPcm
-        )
-
-        output.flush()
-    }
-}
 
     private fun writeWavHeader(
         output: FileOutputStream,
@@ -868,317 +507,134 @@ private fun extractAudioToWav(
         sampleRate: Int,
         channels: Int
     ) {
+        val header = ByteBuffer.allocate(44).order(ByteOrder.LITTLE_ENDIAN)
 
-        val header =
-            ByteBuffer
-                .allocate(44)
-                .order(
-                    ByteOrder.LITTLE_ENDIAN
-                )
-
-        header.put(
-            byteArrayOf(
-                'R'.code.toByte(),
-                'I'.code.toByte(),
-                'F'.code.toByte(),
-                'F'.code.toByte()
-            )
-        )
-
-        header.putInt(
-            (36 + dataSize).toInt()
-        )
-
-        header.put(
-            byteArrayOf(
-                'W'.code.toByte(),
-                'A'.code.toByte(),
-                'V'.code.toByte(),
-                'E'.code.toByte()
-            )
-        )
-
-        header.put(
-            byteArrayOf(
-                'f'.code.toByte(),
-                'm'.code.toByte(),
-                't'.code.toByte(),
-                ' '.code.toByte()
-            )
-        )
+        header.put("RIFF".toByteArray(Charsets.US_ASCII))
+        header.putInt((36 + dataSize).toInt())
+        header.put("WAVE".toByteArray(Charsets.US_ASCII))
+        header.put("fmt ".toByteArray(Charsets.US_ASCII))
 
         header.putInt(16)
         header.putShort(1)
         header.putShort(channels.toShort())
-
         header.putInt(sampleRate)
 
-        val byteRate =
-            sampleRate *
-                channels *
-                2
-
+        val byteRate = sampleRate * channels * 2
         header.putInt(byteRate)
 
-        header.putShort(
-            (channels * 2).toShort()
-        )
-
+        header.putShort((channels * 2).toShort())
         header.putShort(16)
 
-        header.put(
-            byteArrayOf(
-                'd'.code.toByte(),
-                'a'.code.toByte(),
-                't'.code.toByte(),
-                'a'.code.toByte()
-            )
-        )
+        header.put("data".toByteArray(Charsets.US_ASCII))
+        header.putInt(dataSize.toInt())
 
-        header.putInt(
-            dataSize.toInt()
-        )
-
-        output.write(
-            header.array()
-        )
+        output.write(header.array())
     }
 
-    private fun updateWavHeader(
-        file: File,
-        dataSize: Long,
-        sampleRate: Int,
-        channels: Int
-    ) {
-
-      RandomAccessFile(
-            file,
-            "rw"
-        ).use { raf ->
-
-            raf.seek(4)
-
-            raf.writeIntLE(
-                (36 + dataSize).toInt()
-            )
-
-            raf.seek(24)
-
-            raf.writeIntLE(
-                sampleRate
-            )
-
-            raf.seek(28)
-
-            raf.writeIntLE(
-                sampleRate *
-                    channels *
-                    2
-            )
-
-            raf.seek(40)
-
-            raf.writeIntLE(
-                dataSize.toInt()
-            )
+    private fun updateStatus(text: String) {
+        runOnUiThread {
+            findViewById<TextView>(R.id.txtStatus).text = text
         }
     }
 
-  private fun updateStatus(
-    text: String
-) {
-    runOnUiThread {
-        findViewById<TextView>(
-            R.id.txtStatus
-        ).text = text
-    }
-  }  private fun RandomAccessFile.writeIntLE(
-        value: Int
-    ) {
+    private fun cleanSubtitleText(text: String): String {
 
-        write(
-            byteArrayOf(
-                (value and 0xff).toByte(),
-                ((value shr 8) and 0xff).toByte(),
-                ((value shr 16) and 0xff).toByte(),
-                ((value shr 24) and 0xff).toByte()
-            )
-        )
-    }
+        var result = text.replace(Regex("\\s+"), " ").trim()
 
-  
-
-            private fun cleanSubtitleText(
-    text: String
-): String {
-
-    var result =
-        text
-            .replace(Regex("\\s+"), " ")
-            .trim()
-
-    result =
-        result
+        result = result
             .replace(Regex("\\s+([,.!?;:])"), "$1")
             .replace(Regex("([,.!?;:])(?=\\S)"), "$1 ")
 
-    // Xóa từ bị lặp liên tiếp:
-    // "đúng đúng" -> "đúng"
-    // "rồi rồi rồi" -> "rồi"
-    result =
-        result.replace(
-            Regex(
-                "(?iu)\\b([\\p{L}\\p{N}]{2,})\\b(?:\\s+\\1\\b)+"
-            ),
+        // Xóa từ bị lặp liên tiếp: "đúng đúng" -> "đúng"
+        result = result.replace(
+            Regex("(?iu)\\b([\\p{L}\\p{N}]{2,})\\b(?:\\s+\\1\\b)+"),
             "$1"
         )
 
-    return result.trim()
-}
-
-private fun splitSubtitleText(
-    text: String
-): String {
-
-    if (text.length <= 42) {
-        return text
+        return result.trim()
     }
 
-    // Ưu tiên ngắt dòng tại dấu câu
-    val punctuationBreak =
-        Regex("(?<=[,.!?;:])\\s+")
+    private fun splitSubtitleText(text: String): String {
 
-    val parts =
-        text.split(punctuationBreak)
-
-    if (parts.size > 1) {
-
-        val first =
-            parts[0].trim()
-
-        val remaining =
-            parts
-                .drop(1)
-                .joinToString(" ")
-                .trim()
-
-        if (
-            first.isNotEmpty() &&
-            remaining.isNotEmpty() &&
-            first.length <= 42
-        ) {
-            return "$first\n$remaining"
+        if (text.length <= 42) {
+            return text
         }
-    }
 
-    // Không có vị trí ngắt phù hợp -> chia theo từ
-    val words =
-        text.split(" ")
+        // Ưu tiên ngắt dòng tại dấu câu
+        val punctuationBreak = Regex("(?<=[,.!?;:])\\s+")
+        val parts = text.split(punctuationBreak)
 
-    val firstLine =
-        StringBuilder()
+        if (parts.size > 1) {
+            val first = parts[0].trim()
+            val remaining = parts.drop(1).joinToString(" ").trim()
 
-    val secondLine =
-        StringBuilder()
-
-    for (word in words) {
-
-        if (
-            firstLine.length +
-            word.length +
-            (if (firstLine.isEmpty()) 0 else 1)
-            <= 42
-        ) {
-
-            if (firstLine.isNotEmpty()) {
-                firstLine.append(" ")
+            if (first.isNotEmpty() && remaining.isNotEmpty() && first.length <= 42) {
+                return "$first\n$remaining"
             }
-
-            firstLine.append(word)
-
-        } else {
-
-            if (secondLine.isNotEmpty()) {
-                secondLine.append(" ")
-            }
-
-            secondLine.append(word)
         }
-    }
 
-    return if (secondLine.isEmpty()) {
-        firstLine.toString()
-    } else {
-        "${firstLine}\n${secondLine}"
-    }
-}
- private fun formatSrtTime(
-    milliseconds: Long
-): String {
+        // Không có vị trí ngắt phù hợp -> chia theo từ
+        val words = text.split(" ")
 
-    val hours =
-        milliseconds / 3_600_000
+        val firstLine = StringBuilder()
+        val secondLine = StringBuilder()
 
-    val minutes =
-        (milliseconds % 3_600_000) / 60_000
-
-    val seconds =
-        (milliseconds % 60_000) / 1_000
-
-    val millis =
-        milliseconds % 1_000
-
-    return buildString {
-    append(hours.toString().padStart(2, '0'))
-    append(":")
-    append(minutes.toString().padStart(2, '0'))
-    append(":")
-    append(seconds.toString().padStart(2, '0'))
-    append(",")
-    append(millis.toString().padStart(3, '0'))
-    }
- } 
-private fun getFileName(
-    uri: Uri
-): String {
-
-    var fileName = "video"
-
-    val cursor: android.database.Cursor? =
-    contentResolver.query(
-            uri,
-            null,
-            null,
-            null,
-            null
-        )
-
-    if (cursor != null) {
-
-        try {
-
-            val nameIndex =
-                cursor.getColumnIndex(
-                    OpenableColumns.DISPLAY_NAME
-                )
-
-            if (
-                cursor.moveToFirst() &&
-                nameIndex >= 0
+        for (word in words) {
+            if (secondLine.isEmpty() &&
+                firstLine.length + word.length + (if (firstLine.isEmpty()) 0 else 1) <= 42
             ) {
-
-                fileName =
-                    cursor.getString(
-                        nameIndex
-                    )
+                if (firstLine.isNotEmpty()) firstLine.append(" ")
+                firstLine.append(word)
+            } else {
+                if (secondLine.isNotEmpty()) secondLine.append(" ")
+                secondLine.append(word)
             }
+        }
 
-        } finally {
-
-            cursor.close()
+        return if (secondLine.isEmpty()) {
+            firstLine.toString()
+        } else {
+            "$firstLine\n$secondLine"
         }
     }
 
-    return fileName
-}
+    private fun formatSrtTime(milliseconds: Long): String {
+
+        val hours = milliseconds / 3_600_000
+        val minutes = (milliseconds % 3_600_000) / 60_000
+        val seconds = (milliseconds % 60_000) / 1_000
+        val millis = milliseconds % 1_000
+
+        return buildString {
+            append(hours.toString().padStart(2, '0'))
+            append(":")
+            append(minutes.toString().padStart(2, '0'))
+            append(":")
+            append(seconds.toString().padStart(2, '0'))
+            append(",")
+            append(millis.toString().padStart(3, '0'))
+        }
+    }
+
+    private fun getFileName(uri: Uri): String {
+
+        var fileName = "video"
+
+        val cursor: android.database.Cursor? =
+            contentResolver.query(uri, null, null, null, null)
+
+        if (cursor != null) {
+            try {
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+
+                if (cursor.moveToFirst() && nameIndex >= 0) {
+                    fileName = cursor.getString(nameIndex)
+                }
+            } finally {
+                cursor.close()
+            }
+        }
+
+        return fileName
+    }
 }
