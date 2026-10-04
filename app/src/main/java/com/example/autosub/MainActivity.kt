@@ -149,7 +149,7 @@ class MainActivity : AppCompatActivity() {
                     model,
                     audioFile.absolutePath,
                     WhisperConfig(
-                        language = "auto"
+                        language = "zh"
                     )
                 )
 
@@ -187,22 +187,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     private suspend fun translateToVietnamese(
-        texts: List<String>
-    ): List<String> {
-        if (texts.isEmpty()) return texts
+    texts: List<String>,
+    sourceLang: String = "zh"
+): List<String> {
+    if (texts.isEmpty()) return texts
 
-        return try {
-            val sample = texts.joinToString(" ").take(2000)
+    return try {
+        if (sourceLang == "vi") return texts
 
-            val langTag = LanguageIdentification
-                .getClient()
-                .identifyLanguage(sample)
-                .await()
-
-            if (langTag == "und" || langTag == "vi") return texts
-
-            val source = TranslateLanguage.fromLanguageTag(langTag)
-                ?: return texts
+        val source = TranslateLanguage.fromLanguageTag(sourceLang)
+            ?: return texts
 
             val translator = Translation.getClient(
                 TranslatorOptions.Builder()
