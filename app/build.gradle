@@ -11,8 +11,8 @@ android {
         applicationId 'com.example.autosub'
         minSdk 26
         targetSdk 35
-        versionCode 3
-versionName "1.1.2"
+        versionCode 4
+        versionName "1.2.0"
     }
 
     compileOptions {
@@ -33,5 +33,10 @@ dependencies {
     // Whisper offline speech-to-text
     implementation 'dev.ffmpegkit-maintained:whisper-android:1.0.0'
 
-implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+    implementation 'androidx.lifecycle:lifecycle-runtime-ktx:2.8.7'
+
+    // Dịch offline sang tiếng Việt
+    implementation 'com.google.mlkit:translate:17.0.3'
+    implementation 'com.google.mlkit:language-id:17.0.6'
+    implementation 'org.jetbrains.kotlinx:kotlinx-coroutines-play-services:1.8.1'
 }
